@@ -84,6 +84,8 @@ Sin calibrar se usan 32 LEDs por conector, y los efectos avanzados pueden verse 
 
 ## Compilación
 
+Los detalles técnicos (pruebas, instalador por dentro, protocolo del controlador de luces y trampas conocidas) están en [`DESARROLLO.md`](DESARROLLO.md).
+
 Necesitas:
 
 - **Visual Studio Build Tools** 2022 o posterior, con la carga de trabajo *Desarrollo para el escritorio con C++*.
