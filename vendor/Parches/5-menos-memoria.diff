@@ -1,0 +1,78 @@
+--- a/main.py
++++ b/main.py
+@@ -32,6 +32,10 @@ check_python_version()
+ import os
+ import sys
+ 
++# numpy only converts one small image per cycle: with a single thread, OpenBLAS does not reserve a buffer
++# per CPU core (hundreds of MB of committed memory). Must be set before numpy is imported.
++os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
++
+ try:
+     import argparse
+     import atexit
+@@ -259,6 +263,7 @@ if __name__ == "__main__":
+         scheduler.CustomStats(); time.sleep(DELAY_BETWEEN_THREADS)
+         scheduler.WeatherStats(); time.sleep(DELAY_BETWEEN_THREADS)
+         scheduler.PingStats(); time.sleep(DELAY_BETWEEN_THREADS)
++        scheduler.MemoryTrim()
+     else:
+         logger.info("Theme screenshots mode enabled - program will run %d iterations then close." % args.theme_screenshots)
+         # Run a predefined number of time to generate theme screenshot then close
+--- a/library/scheduler.py
++++ b/library/scheduler.py
+@@ -27,6 +27,7 @@ from datetime import timedelta
+ from functools import wraps
+ 
+ import library.config as config
++import library.memory as memory
+ import library.stats as stats
+ from library.log import logger
+ 
+@@ -200,6 +201,19 @@ def PingStats():
+     stats.Ping.stats()
+ 
+ 
++@async_job("Memory_Trim")
++def MemoryTrim():
++    # Return unused memory (startup, LibreHardwareMonitor init) to Windows, once the first sensor reads
++    # are done and then periodically. No effect on other OS.
++    time.sleep(30)
++    _memory_trim_periodic()
++
++
++@schedule(timedelta(minutes=5).total_seconds())
++def _memory_trim_periodic():
++    memory.trim_working_set()
++
++
+ @async_job("Queue_Handler")
+ @schedule(timedelta(milliseconds=1).total_seconds())
+ def QueueHandler():
+--- /dev/null
++++ b/library/memory.py
+@@ -0,0 +1,24 @@
++# SPDX-License-Identifier: GPL-3.0-or-later
++#
++# Memoria del proceso en Windows. Tras arrancar, la mayor parte de la memoria del monitor (carga de
++# librerías, runtime .NET y detección del hardware de LibreHardwareMonitor) no se vuelve a usar, pero
++# Windows la sigue contando como suya (~125 MB). Devolverla deja el proceso en lo que usa de verdad
++# (~20 MB); lo que vuelva a necesitar lo recupera al momento.
++
++import platform
++
++
++def trim_working_set() -> bool:
++    """Devuelve a Windows la memoria que el proceso no está usando. False fuera de Windows o si falla."""
++    if platform.system() != "Windows":
++        return False
++    import ctypes
++    from ctypes import wintypes
++
++    kernel32 = ctypes.WinDLL("kernel32")
++    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
++    kernel32.SetProcessWorkingSetSize.argtypes = [wintypes.HANDLE, ctypes.c_size_t, ctypes.c_size_t]
++    kernel32.SetProcessWorkingSetSize.restype = wintypes.BOOL
++    # (SIZE_T)-1 en los dos límites: vaciar el working set
++    size = ctypes.c_size_t(-1).value
++    return bool(kernel32.SetProcessWorkingSetSize(kernel32.GetCurrentProcess(), size, size))

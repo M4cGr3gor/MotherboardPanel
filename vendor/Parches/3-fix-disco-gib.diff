@@ -1,0 +1,25 @@
+--- a/library/stats.py
++++ b/library/stats.py
+@@ -685,19 +685,19 @@
+ 
+         display_themed_value(
+             theme_data=disk_theme_data['USED']['TEXT'],
+-            value=int(used / 1000000000),
++            value=int(used / 1024 ** 3),  # GiB, as Windows Explorer shows it
+             min_size=5,
+             unit=" G"
+         )
+         display_themed_value(
+             theme_data=disk_theme_data['TOTAL']['TEXT'],
+-            value=int((free + used) / 1000000000),
++            value=int((free + used) / 1024 ** 3),  # GiB, as Windows Explorer shows it
+             min_size=5,
+             unit=" G"
+         )
+         display_themed_value(
+             theme_data=disk_theme_data['FREE']['TEXT'],
+-            value=int(free / 1000000000),
++            value=int(free / 1024 ** 3),  # GiB, as Windows Explorer shows it
+             min_size=5,
+             unit=" G"
+         )

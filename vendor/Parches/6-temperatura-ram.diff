@@ -1,0 +1,56 @@
+--- a/library/sensors/sensors_custom.py
++++ b/library/sensors/sensors_custom.py
+@@ -24,6 +24,7 @@
+ 
+ import math
+ import platform
++import sys
+ from abc import ABC, abstractmethod
+ from typing import List
+ 
+@@ -99,3 +100,45 @@ class ExampleCustomTextOnlyData(CustomDataSource):
+     def last_values(self) -> List[float]:
+         # If a custom data class only has text values, it won't be possible to display line graph
+         pass
++
++
++# Temperature of each RAM module (DDR5 modules have a temperature sensor), read from LibreHardwareMonitor.
++# Only available when the monitor already uses LibreHardwareMonitor (HW_SENSORS: LHM, or AUTO on Windows):
++# importing it from here would load it on its own and stop the program when not running as administrator.
++def ram_module_temperatures() -> List[float]:
++    lhm = sys.modules.get("library.sensors.sensors_librehardwaremonitor")
++    if lhm is None:
++        return []
++    temperatures = []
++    for hardware in lhm.handle.Hardware:
++        if hardware.HardwareType != lhm.Hardware.HardwareType.Memory:
++            continue
++        hardware.Update()
++        # "Total Memory" and "Virtual Memory" have no temperature sensor: only RAM modules are kept
++        for sensor in hardware.Sensors:
++            if sensor.SensorType == lhm.Hardware.SensorType.Temperature and sensor.Value is not None:
++                temperatures.append(float(sensor.Value))
++                break
++    return temperatures
++
++
++class RamTemperature1(CustomDataSource):
++    module = 1  # first RAM module found by LibreHardwareMonitor
++
++    def as_numeric(self) -> float:
++        temperatures = ram_module_temperatures()
++        self.value = temperatures[self.module - 1] if len(temperatures) >= self.module else math.nan
++        return self.value
++
++    def as_string(self) -> str:
++        value = getattr(self, "value", None)
++        if value is None:
++            value = self.as_numeric()
++        return "--°C" if math.isnan(value) else f"{value:.0f}°C"
++
++    def last_values(self) -> List[float]:
++        pass
++
++
++class RamTemperature2(RamTemperature1):
++    module = 2  # second RAM module

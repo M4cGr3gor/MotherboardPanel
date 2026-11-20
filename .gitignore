@@ -1,0 +1,21 @@
+build/
+bin/
+obj/
+dist/
+work/
+venv*/
+__pycache__/
+*.res
+*.obj
+# Binarios de terceros y resultados de compilación: solo en el paquete Instalar/, no van al repositorio
+vendor/turing-installer/
+vendor/LibreHardwareMonitor_0.9.6/
+vendor/PawnIO_2.2.0.exe
+Instalar/Pantalla/
+Instalar/Luces/
+Instalar/Motherboard Panel/
+Instalar/Drivers/
+# Código de la pantalla: se reconstruye con el commit 2b33ab4 + vendor/Parches
+src/turing-smart-screen-python/
+src/RGBControl/*.exe
+src/MotherboardPanel/*.exe

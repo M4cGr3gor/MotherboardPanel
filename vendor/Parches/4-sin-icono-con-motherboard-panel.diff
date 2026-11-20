@@ -1,0 +1,93 @@
+--- a/main.py
++++ b/main.py
+@@ -51,6 +51,7 @@
+     from library.log import logger
+     import library.scheduler as scheduler
+     from library.display import display
++    import library.motherboard_panel as motherboard_panel
+ 
+ except Exception as e:
+     print("""Import error: %s
+@@ -171,29 +172,34 @@
+                 clean_stop()
+ 
+     # Create a tray icon for the program, with an Exit entry in menu
+-    try:
+-        tray_icon = pystray.Icon(
+-            name='Turing System Monitor',
+-            title='Turing System Monitor',
+-            icon=Image.open(MAIN_DIRECTORY / "res/icons/monitor-icon-17865/64.png"),
+-            menu=pystray.Menu(
+-                pystray.MenuItem(
+-                    text='Configure',
+-                    action=on_configure_tray),
+-                pystray.Menu.SEPARATOR,
+-                pystray.MenuItem(
+-                    text='Exit',
+-                    action=on_exit_tray)
++    # (unless Motherboard Panel is running: it shows a single tray icon for this monitor and other modules)
++    if motherboard_panel.is_running():
++        tray_icon = None
++        logger.info("Motherboard Panel detected: tray icon hidden")
++    else:
++        try:
++            tray_icon = pystray.Icon(
++                name='Turing System Monitor',
++                title='Turing System Monitor',
++                icon=Image.open(MAIN_DIRECTORY / "res/icons/monitor-icon-17865/64.png"),
++                menu=pystray.Menu(
++                    pystray.MenuItem(
++                        text='Configure',
++                        action=on_configure_tray),
++                    pystray.Menu.SEPARATOR,
++                    pystray.MenuItem(
++                        text='Exit',
++                        action=on_exit_tray)
++                )
+             )
+-        )
+ 
+-        # For platforms != macOS, display the tray icon now with non-blocking function
+-        if platform.system() != "Darwin":
+-            tray_icon.run_detached()
+-            logger.info("Tray icon has been displayed")
+-    except:
+-        tray_icon = None
+-        logger.warning("Tray icon is not supported on your platform")
++            # For platforms != macOS, display the tray icon now with non-blocking function
++            if platform.system() != "Darwin":
++                tray_icon.run_detached()
++                logger.info("Tray icon has been displayed")
++        except:
++            tray_icon = None
++            logger.warning("Tray icon is not supported on your platform")
+ 
+     # Parse command-line arguments
+     parser = argparse.ArgumentParser(description="Turing System Monitor")
+--- /dev/null
++++ b/library/motherboard_panel.py
+@@ -0,0 +1,24 @@
++# SPDX-License-Identifier: GPL-3.0-or-later
++#
++# Detección de Motherboard Panel: un programa de bandeja que gestiona este monitor y otros módulos
++# con un único icono. Mientras está en marcha mantiene un mutex con nombre; si existe, el monitor
++# no muestra su propio icono en la bandeja.
++
++import platform
++
++MUTEX_NAME = "MotherboardPanel"
++
++
++def is_running(name: str = MUTEX_NAME) -> bool:
++    """True si existe el mutex con nombre `name` (Motherboard Panel en marcha)."""
++    if platform.system() != "Windows":
++        return False
++    try:
++        import win32api
++        import win32con
++        import win32event
++        handle = win32event.OpenMutex(win32con.SYNCHRONIZE, False, name)
++    except Exception:
++        return False
++    win32api.CloseHandle(handle)
++    return True

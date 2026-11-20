@@ -1,0 +1,159 @@
+diff --git a/library/scheduler.py b/library/scheduler.py
+index d6a1edd5..c774cfbc 100644
+--- a/library/scheduler.py
++++ b/library/scheduler.py
+@@ -28,9 +28,15 @@
+ 
+ import library.config as config
+ import library.stats as stats
++from library.log import logger
+ 
+ STOPPING = False
+ 
++# Some jobs run every millisecond, so a job failing at every run would flood the log file:
++# only log the same failing job once per this delay (in seconds).
++ERROR_LOG_MIN_INTERVAL = 1.0
++_last_error_log = {}
++
+ 
+ def async_job(threadname=None):
+     """ wrapper to handle asynchronous threads """
+@@ -62,7 +68,16 @@ def periodic(scheduler, periodic_interval, action, actionargs=()):
+                 # If the program is not stopping: re-schedule the task for future execution
+                 scheduler.enter(periodic_interval, 1, periodic,
+                                 (scheduler, periodic_interval, action, actionargs))
+-            action(*actionargs)
++            # A failing sensor read must not kill this stat's thread: the next run is already
++            # scheduled above, so log the error and keep going.
++            try:
++                action(*actionargs)
++            except Exception:
++                name = getattr(action, "__name__", str(action))
++                now = time.monotonic()
++                if now - _last_error_log.get(name, 0.0) >= ERROR_LOG_MIN_INTERVAL:
++                    _last_error_log[name] = now
++                    logger.exception("Scheduled job '%s' failed, skipping this cycle", name)
+ 
+         @wraps(func)
+         def wrap(
+diff --git a/library/stats.py b/library/stats.py
+index 9abdc6f4..08f12cad 100644
+--- a/library/stats.py
++++ b/library/stats.py
+@@ -29,7 +29,7 @@
+ import platform
+ import random
+ import sys
+-from typing import List
++from typing import List, Optional
+ 
+ import babel.dates
+ import requests
+@@ -122,6 +122,11 @@ def display_themed_value(theme_data, value, min_size=0, unit=''):
+ 
+ 
+ def display_themed_percent_value(theme_data, value):
++    # A sensor can transiently return nan: int(nan) raises ValueError, which would kill this
++    # stat's thread. Note this happens before the SHOW check below, i.e. even when hidden.
++    if value is None or math.isnan(value):
++        return
++
+     display_themed_value(
+         theme_data=theme_data,
+         value=int(value),
+@@ -131,6 +136,9 @@ def display_themed_percent_value(theme_data, value):
+ 
+ 
+ def display_themed_temperature_value(theme_data, value):
++    if value is None or math.isnan(value):
++        return
++
+     display_themed_value(
+         theme_data=theme_data,
+         value=int(value),
+@@ -143,6 +151,9 @@ def display_themed_progress_bar(theme_data, value):
+     if not theme_data.get("SHOW", False):
+         return
+ 
++    if value is None or math.isnan(value):
++        return
++
+     display.lcd.DisplayProgressBar(
+         x=theme_data.get("X", 0),
+         y=theme_data.get("Y", 0),
+@@ -202,6 +213,9 @@ def display_themed_radial_bar(theme_data, value, min_size=0, unit='', custom_tex
+ 
+ 
+ def display_themed_percent_radial_bar(theme_data, value):
++    if value is None or math.isnan(value):
++        return
++
+     display_themed_radial_bar(
+         theme_data=theme_data,
+         value=int(value),
+@@ -211,6 +225,9 @@ def display_themed_percent_radial_bar(theme_data, value):
+ 
+ 
+ def display_themed_temperature_radial_bar(theme_data, value):
++    if value is None or math.isnan(value):
++        return
++
+     display_themed_radial_bar(
+         theme_data=theme_data,
+         value=int(value),
+@@ -245,10 +262,14 @@ def display_themed_line_graph(theme_data, values):
+     )
+ 
+ 
+-def save_last_value(value: float, last_values: List[float], history_size: int):
++def save_last_value(value: Optional[float], last_values: List[float], history_size: int):
+     # Initialize last values list the first time with given size
+     if len(last_values) != history_size:
+         last_values[:] = last_values_list(size=history_size)
++    # A sensor may transiently return None: store it as the nan "no data" marker, else
++    # math.isnan() in DisplayLineGraph raises TypeError on every later redraw of this graph.
++    if value is None:
++        value = math.nan
+     # Store the value to the list that can then be used for line graph
+     last_values.append(value)
+     # Also remove the oldest value from list
+@@ -933,22 +954,26 @@ def stats(cls):
+             delay = random.randint(5, 120)
+         else:
+             delay = ping(dest_addr=PING_DEST, unit="ms")
++            if delay is None or delay is False:
++                # ping3 returns None on timeout and False on unknown host: no delay to display
++                delay = math.nan
+ 
+         save_last_value(delay, cls.last_values_ping,
+                         theme_data['LINE_GRAPH'].get("HISTORY_SIZE", DEFAULT_HISTORY_SIZE))
+         # logger.debug(f"Ping delay: {delay}ms")
+ 
+-        display_themed_progress_bar(theme_data['GRAPH'], delay)
+-        display_themed_radial_bar(
+-            theme_data=theme_data['RADIAL'],
+-            value=int(delay),
+-            unit="ms",
+-            min_size=6
+-        )
+-        display_themed_value(
+-            theme_data=theme_data['TEXT'],
+-            value=int(delay),
+-            unit="ms",
+-            min_size=6
+-        )
++        if not math.isnan(delay):
++            display_themed_progress_bar(theme_data['GRAPH'], delay)
++            display_themed_radial_bar(
++                theme_data=theme_data['RADIAL'],
++                value=int(delay),
++                unit="ms",
++                min_size=6
++            )
++            display_themed_value(
++                theme_data=theme_data['TEXT'],
++                value=int(delay),
++                unit="ms",
++                min_size=6
++            )
+         display_themed_line_graph(theme_data['LINE_GRAPH'], cls.last_values_ping)

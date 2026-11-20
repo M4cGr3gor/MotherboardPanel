@@ -1,0 +1,33 @@
+--- a/library/sensors/sensors_librehardwaremonitor.py
++++ b/library/sensors/sensors_librehardwaremonitor.py
+@@ -435,7 +435,7 @@
+         for sensor in ram.Sensors:
+             if sensor.SensorType == Hardware.SensorType.Data and str(sensor.Name).startswith(
+                     "Memory Used") and sensor.Value is not None:
+-                return int(sensor.Value * 1000000000.0)
++                return int(sensor.Value * 1024 ** 3)  # LHM gives GiB (1024^3 bytes), not GB
+ 
+         return 0
+ 
+@@ -445,7 +445,7 @@
+         for sensor in ram.Sensors:
+             if sensor.SensorType == Hardware.SensorType.Data and str(sensor.Name).startswith(
+                     "Memory Available") and sensor.Value is not None:
+-                return int(sensor.Value * 1000000000.0)
++                return int(sensor.Value * 1024 ** 3)  # LHM gives GiB (1024^3 bytes), not GB
+ 
+         return 0
+ 
+@@ -492,10 +492,10 @@
+             for sensor in net_if.Sensors:
+                 if sensor.SensorType == Hardware.SensorType.Data and str(sensor.Name).startswith(
+                         "Data Uploaded") and sensor.Value is not None:
+-                    uploaded = int(sensor.Value * 1000000000.0)
++                    uploaded = int(sensor.Value * 1024 ** 3)  # LHM gives GiB (1024^3 bytes), not GB
+                 elif sensor.SensorType == Hardware.SensorType.Data and str(sensor.Name).startswith(
+                         "Data Downloaded") and sensor.Value is not None:
+-                    downloaded = int(sensor.Value * 1000000000.0)
++                    downloaded = int(sensor.Value * 1024 ** 3)  # LHM gives GiB (1024^3 bytes), not GB
+                 elif sensor.SensorType == Hardware.SensorType.Throughput and str(sensor.Name).startswith(
+                         "Upload Speed") and sensor.Value is not None:
+                     upload_rate = int(sensor.Value)

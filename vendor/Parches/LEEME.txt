@@ -1,0 +1,97 @@
+CORRECCIONES DE TURING SYSTEM MONITOR (turing-smart-screen-python)
+=================================================================
+
+La carpeta "Programa corregido" contiene SOLO los archivos que cambian respecto a
+la versión oficial 3.10.0 (unos 370 archivos, ~117 MB, en lugar de los ~387 MB del
+programa completo). Copiados encima de una instalación oficial 3.10.0 dan como
+resultado el programa ya compilado con estas correcciones. El script de
+instalación de Motherboard Panel (opción 1) hace esa copia, así que NO hace
+falta volver a compilar tras reinstalar el programa oficial.
+
+IMPORTANTE: requiere la 3.10.0 oficial ("Turing system monitor 3.10.0.exe",
+incluido en el paquete). El script de instalación siempre la instala primero y
+después copia encima estas correcciones.
+
+Base: código fuente del commit 2b33ab4f00a096916dd6a1174441a53a7ec33b03 de la
+rama "main" (04/09/2026, posterior a la 3.10.0), compilado con Python 3.14 y
+PyInstaller 6.22 usando turing-system-monitor.spec. Incluye LibreHardwareMonitor 0.9.6.
+Versión resultante: 3.10.0+main-20260904+fixes.6
+
+Parches aplicados (por este orden)
+----------------------------------
+1-fix-congelamiento-nan (PR 1036).diff
+   Arreglo propuesto en https://github.com/mathoudebine/turing-smart-screen-python/pull/1036
+   Síntoma: un dato (p. ej. el uso de la CPU) se congela para siempre sin dejar
+   rastro en log.log. Causa: si un sensor devuelve NaN, int(NaN) lanza una
+   excepción que mata el hilo de ese dato. El parche comprueba NaN y hace que el
+   planificador registre el error en log.log y siga funcionando.
+
+2-fix-memoria-gib.diff
+   Síntoma: la RAM total aparece como ~30147 MB con 32 GB instalados.
+   Causa: LibreHardwareMonitor da la memoria (y los totales de red) en GiB
+   (1024^3 bytes) y el programa la convertía como si fueran GB (10^9 bytes).
+   Afecta a: library/sensors/sensors_librehardwaremonitor.py
+
+3-fix-disco-gib.diff
+   No es un error, es una preferencia: el programa daba el tamaño del disco en
+   GB decimales (10^9 bytes; p. ej. 999 GB para un SSD de 1 TB) y el Explorador
+   de Windows lo da en GiB (1024^3 bytes; 930 "GB"). Con este cambio el disco
+   usado, libre y total se muestran igual que en el Explorador.
+   Afecta a: library/stats.py (clase Disk)
+
+4-sin-icono-con-motherboard-panel.diff
+   Si Motherboard Panel está en marcha (mutex con nombre "MotherboardPanel"), el
+   monitor no muestra su propio icono en la bandeja: lo gestiona Motherboard
+   Panel. Sin Motherboard Panel, el icono aparece como siempre.
+   Afecta a: main.py y library/motherboard_panel.py (nuevo)
+
+5-menos-memoria.diff
+   Síntoma: el monitor ocupa unos 100 MB de memoria en el Administrador de tareas.
+   Causa: casi toda es del arranque (librerías, runtime .NET y detección del hardware
+   de LibreHardwareMonitor) y no se vuelve a usar, pero Windows la sigue contando
+   como del proceso; el trabajo de cada segundo solo necesita unos 15-20 MB.
+   El parche devuelve a Windows la memoria que no se usa 30 s después de arrancar y
+   luego cada 5 minutos (tarea "Memory_Trim" del planificador; sin efecto fuera de
+   Windows), y limita OpenBLAS (numpy) a un hilo, que reservaba un búfer por núcleo
+   (más de 700 MB de memoria comprometida) para convertir una imagen pequeña.
+   Afecta a: main.py, library/scheduler.py y library/memory.py (nuevo)
+
+6-temperatura-ram.diff
+   Añade dos datos personalizados para los temas, RamTemperature1 y RamTemperature2:
+   la temperatura de cada módulo de RAM (los DDR5 tienen sensor), leída de
+   LibreHardwareMonitor (módulos en el orden en que los detecta; "Total Memory" y
+   "Virtual Memory" no tienen sensor de temperatura y se saltan). Muestran "38°C",
+   o "--°C" si no hay lectura o si el monitor no usa LibreHardwareMonitor (no lo
+   carga por su cuenta: sin permisos de administrador cerraría el programa).
+   Uso en un tema: STATS > CUSTOM > RamTemperature1 > TEXT (lo usa BloquesColorPestanas).
+   Afecta a: library/sensors/sensors_custom.py
+
+Los .diff usan saltos de línea LF, como el código de GitHub.
+
+Cuándo dejar de usar el programa corregido
+------------------------------------------
+Cuando salga una versión oficial que incluya los arreglos 1 y 2 (el 3 es solo
+una preferencia de unidades, el 4 solo sirve para Motherboard Panel, el 5 solo
+reduce la memoria y el 6 añade datos que usan los temas propios).
+
+Cómo recompilar (solo si hiciera falta)
+---------------------------------------
+1. Descargar el código del commit indicado arriba:
+   https://github.com/mathoudebine/turing-smart-screen-python/archive/2b33ab4f00a096916dd6a1174441a53a7ec33b03.zip
+2. En su carpeta, por este orden:
+                   git apply "1-fix-congelamiento-nan (PR 1036).diff"
+                   git apply "2-fix-memoria-gib.diff"
+                   git apply "3-fix-disco-gib.diff"
+                   git apply "4-sin-icono-con-motherboard-panel.diff"
+                   git apply "5-menos-memoria.diff"
+                   git apply "6-temperatura-ram.diff"
+3. python -m venv venv
+   venv\Scripts\pip install -r requirements.txt
+   venv\Scripts\python tools\windows-installer\generate-version-info.py 3.10.0
+   venv\Scripts\pyinstaller --noconfirm turing-system-monitor.spec
+4. El resultado queda en dist\turing-system-monitor. Borrar de ahí
+   res\themes\--Theme examples y config.yaml, escribir la versión en
+   version.txt, y guardar en "Programa corregido" solo los archivos que sean
+   distintos o no existan en la versión portátil oficial 3.10.0
+   (turing-system-monitor-3.10.0-portable.zip de la página de releases del
+   proyecto), comparándolos por contenido.
